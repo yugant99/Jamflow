@@ -1,26 +1,28 @@
-"use client"
+"use client";
 
-import React, { useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Music, Play, ExternalLink, Copy, Check } from 'lucide-react'
+import React, { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Send, Music, Play, ExternalLink, Copy, Check } from "lucide-react";
 
 // Simple message type that matches our custom implementation
 type Message = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-}
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
 
 interface ChatProps {
-  messages: Message[]
-  input: string
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
-  isLoading?: boolean
-  stop?: () => void
+  messages: Message[];
+  input: string;
+  handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  isLoading?: boolean;
+  stop?: () => void;
+  iframeKey: number;
+  setIframeKey: React.Dispatch<React.SetStateAction<number>>;
 }
 
 // Enhanced Strudel code detection
@@ -36,117 +38,131 @@ function containsStrudelCode(content: string): boolean {
     /\.gain\s*\(/,
     /\.room\s*\(/,
     /\.delay\s*\(/,
-    /\.lpf\s*\(/
-  ]
-  
-  return strudelPatterns.some(pattern => pattern.test(content))
+    /\.lpf\s*\(/,
+  ];
+
+  return strudelPatterns.some((pattern) => pattern.test(content));
 }
 
 // Enhanced code extraction with better parsing
 function extractStrudelCode(content: string): string | null {
-  if (!containsStrudelCode(content)) return null
-  
+  if (!containsStrudelCode(content)) return null;
+
   // Try to extract from code blocks first (```javascript, ```strudel, etc.)
   const codeBlockPatterns = [
     /```(?:javascript|js|strudel)\n?([\s\S]*?)\n?```/g,
-    /```\n?([\s\S]*?setcpm[\s\S]*?)\n?```/g
-  ]
-  
+    /```\n?([\s\S]*?setcpm[\s\S]*?)\n?```/g,
+  ];
+
   for (const pattern of codeBlockPatterns) {
-    const matches = Array.from(content.matchAll(pattern))
+    const matches = Array.from(content.matchAll(pattern));
     if (matches.length > 0) {
-      return matches.map(match => match[1].trim()).join('\n\n')
+      return matches.map((match) => match[1].trim()).join("\n\n");
     }
   }
-  
+
   // Extract individual Strudel lines
-  const lines = content.split('\n')
-  const codeLines = lines.filter(line => {
-    const trimmed = line.trim()
-    return containsStrudelCode(trimmed) && 
-           !trimmed.startsWith('//') && // Skip comments
-           trimmed.length > 3 // Skip very short lines
-  })
-  
-  return codeLines.length > 0 ? codeLines.join('\n') : null
+  const lines = content.split("\n");
+  const codeLines = lines.filter((line) => {
+    const trimmed = line.trim();
+    return (
+      containsStrudelCode(trimmed) &&
+      !trimmed.startsWith("//") && // Skip comments
+      trimmed.length > 3
+    ); // Skip very short lines
+  });
+
+  return codeLines.length > 0 ? codeLines.join("\n") : null;
 }
 
 // Extract explanatory text (non-code parts)
 function extractExplanation(content: string): string {
   // Remove code blocks
-  let explanation = content.replace(/```[\s\S]*?```/g, '')
-  
+  let explanation = content.replace(/```[\s\S]*?```/g, "");
+
   // Remove individual code lines
-  const lines = explanation.split('\n')
-  const textLines = lines.filter(line => {
-    const trimmed = line.trim()
-    return !containsStrudelCode(trimmed) || trimmed.startsWith('//')
-  })
-  
-  return textLines.join('\n').trim()
+  const lines = explanation.split("\n");
+  const textLines = lines.filter((line) => {
+    const trimmed = line.trim();
+    return !containsStrudelCode(trimmed) || trimmed.startsWith("//");
+  });
+
+  return textLines.join("\n").trim();
 }
 
 // Strudel Player Component - Memoized to prevent unnecessary re-renders
-const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId }: { code: string; title?: string; messageId?: string }) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [currentCode, setCurrentCode] = useState(code) // Track current loaded code
-  const [iframeKey, setIframeKey] = useState(0) // Force complete iframe recreation
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  
+const StrudelPlayer = React.memo(function StrudelPlayer({
+  code,
+  title,
+  messageId,
+  iframeKey,
+  setIframeKey,
+}: {
+  code: string;
+  title?: string;
+  messageId?: string;
+  iframeKey: number;
+  setIframeKey: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentCode, setCurrentCode] = useState(code); // Track current loaded code
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   // Update currentCode when code prop changes
   useEffect(() => {
-    setCurrentCode(code)
-  }, [code])
-  
+    setCurrentCode(code);
+  }, [code]);
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-  
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handlePlayInline = () => {
-    console.log('🎵 Play Inline clicked for message:', messageId)
-    console.log('🎵 Code to load (first 100 chars):', code.substring(0, 100))
-    
-    setIsExpanded(true)
-    setIsLoading(true)
-    
+    console.log("🎵 Play Inline clicked for message:", messageId);
+    console.log("🎵 Code to load (first 100 chars):", code.substring(0, 100));
+
+    setIsExpanded(true);
+    setIsLoading(true);
+
     // Force complete iframe recreation by changing key and updating current code
-    setCurrentCode(code)
-    setIframeKey(prev => prev + 1)
-    
+    setCurrentCode(code);
+    setIframeKey(iframeKey + 1);
+
     // Stop loading indicator after iframe recreates
-    setTimeout(() => setIsLoading(false), 3000)
-  }
-  
+    setTimeout(() => setIsLoading(false), 3000);
+  };
+
   // Create a fresh URL each time with proper encoding and cache-busting
   const createStrudelUrl = (codeToEncode: string) => {
-    const cleanCode = codeToEncode.trim()
-    const encodedCode = encodeURIComponent(cleanCode)
-    const timestamp = Date.now()
-    const randomId = Math.random().toString(36).substr(2, 9)
-    return `https://strudel.cc/?code=${encodedCode}&t=${timestamp}&r=${randomId}&msg=${messageId}&key=${iframeKey}`
-  }
-  
-  const strudelUrl = createStrudelUrl(currentCode)
-  
-  console.log('🎵 StrudelPlayer rendering:', { 
-    messageId, 
-    codeLength: code.length, 
+    const cleanCode = codeToEncode.trim();
+    const encodedCode = encodeURIComponent(cleanCode);
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substr(2, 9);
+    return `https://strudel.cc/?code=${encodedCode}&t=${timestamp}&r=${randomId}&msg=${messageId}&key=${iframeKey}`;
+  };
+
+  const strudelUrl = createStrudelUrl(currentCode);
+
+  console.log("🎵 StrudelPlayer rendering:", {
+    messageId,
+    codeLength: code.length,
     currentCodeLength: currentCode.length,
     iframeKey,
-    isExpanded 
-  })
-  
+    isExpanded,
+  });
+
   return (
     <div className="space-y-3 border rounded-lg p-4 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Music className="h-4 w-4 text-green-600" />
           <span className="text-sm font-medium text-green-700 dark:text-green-300">
-            {title || "Generated Strudel Code"} {messageId && `(${messageId.slice(-4)})`}
+            {title || "Generated Strudel Code"}{" "}
+            {messageId && `(${messageId.slice(-4)})`}
           </span>
         </div>
         <div className="flex gap-2">
@@ -156,7 +172,11 @@ const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId
             onClick={handleCopy}
             className="h-8"
           >
-            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            {copied ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
           </Button>
           <Button
             size="sm"
@@ -164,20 +184,20 @@ const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId
             onClick={() => setIsExpanded(!isExpanded)}
             className="h-8"
           >
-            {isExpanded ? 'Hide' : 'Show'} Code
+            {isExpanded ? "Hide" : "Show"} Code
           </Button>
         </div>
       </div>
-      
+
       {isExpanded && (
         <pre className="bg-gray-900 text-green-400 p-3 rounded text-sm overflow-x-auto border max-h-60 overflow-y-auto">
           <code>{code}</code>
         </pre>
       )}
-      
+
       <div className="flex gap-2">
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           className="flex-1 flex items-center gap-2 bg-green-600 hover:bg-green-700"
           onClick={handlePlayInline}
           disabled={isLoading}
@@ -187,23 +207,23 @@ const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId
           ) : (
             <Play className="h-3 w-3" />
           )}
-          {isLoading ? 'Loading...' : 'Play Inline'}
+          {isLoading ? "Loading..." : "Play Inline"}
         </Button>
-        <Button 
-          size="sm" 
+        <Button
+          size="sm"
           variant="outline"
           className="flex items-center gap-2"
           onClick={() => {
-            const url = createStrudelUrl(code)
-            console.log('🎵 Opening in new tab:', url)
-            window.open(url, '_blank')
+            const url = createStrudelUrl(code);
+            console.log("🎵 Opening in new tab:", url);
+            window.open(url, "_blank");
           }}
         >
           <ExternalLink className="h-3 w-3" />
           Open in Strudel
         </Button>
       </div>
-      
+
       {isExpanded && (
         <div className="mt-4">
           <div className="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-2">
@@ -211,10 +231,13 @@ const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId
             {isLoading ? (
               <span className="flex items-center gap-1">
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-600"></div>
-                Loading fresh Strudel editor with your code... (Key: {iframeKey})
+                Loading fresh Strudel editor with your code... (Key: {iframeKey}
+                )
               </span>
             ) : (
-              `Live Strudel Editor - Message ${messageId?.slice(-4)} (Key: ${iframeKey})`
+              `Live Strudel Editor - Message ${messageId?.slice(
+                -4
+              )} (Key: ${iframeKey})`
             )}
           </div>
           <iframe
@@ -226,19 +249,19 @@ const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             loading="lazy"
             onLoad={() => {
-              console.log('🎵 Strudel iframe loaded:', { 
-                messageId, 
-                iframeKey, 
-                url: strudelUrl.substring(0, 100) + '...' 
-              })
-              setIsLoading(false)
+              console.log("🎵 Strudel iframe loaded:", {
+                messageId,
+                iframeKey,
+                url: strudelUrl.substring(0, 100) + "...",
+              });
+              setIsLoading(false);
             }}
           />
         </div>
       )}
     </div>
-  )
-})
+  );
+});
 
 export function Chat({
   messages,
@@ -246,28 +269,40 @@ export function Chat({
   handleInputChange,
   handleSubmit,
   isLoading = false,
-  stop
+  stop,
+  iframeKey,
+  setIframeKey,
 }: ChatProps) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
+      const scrollContainer = scrollAreaRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]"
+      );
       if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
     }
-  }, [messages])
+  }, [messages]);
 
   // Debug logging
   useEffect(() => {
-    console.log('🎵 Chat re-rendered with', messages.length, 'messages, isLoading:', isLoading)
+    console.log(
+      "🎵 Chat re-rendered with",
+      messages.length,
+      "messages, isLoading:",
+      isLoading
+    );
     messages.forEach((msg, i) => {
-      const hasCode = msg.role === 'assistant' && containsStrudelCode(msg.content)
-      console.log(`Message ${i}: ${msg.role}, hasCode: ${hasCode}, length: ${msg.content.length}`)
-    })
-  }, [messages, isLoading])
+      const hasCode =
+        msg.role === "assistant" && containsStrudelCode(msg.content);
+      console.log(
+        `Message ${i}: ${msg.role}, hasCode: ${hasCode}, length: ${msg.content.length}`
+      );
+    });
+  }, [messages, isLoading]);
 
   return (
     <div className="flex flex-col h-screen max-w-6xl mx-auto p-4">
@@ -279,7 +314,8 @@ export function Chat({
             🎵 Jamflow
           </h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            AI-powered conversational assistant & Strudel music generator with embedded player
+            AI-powered conversational assistant & Strudel music generator with
+            embedded player
           </p>
         </div>
       </div>
@@ -292,32 +328,52 @@ export function Chat({
               <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                 <Music className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p className="text-lg font-medium mb-2">Welcome to Jamflow!</p>
-                <p className="text-sm mb-4">I'm your AI assistant for both conversation and music creation with Strudel.</p>
+                <p className="text-sm mb-4">
+                  I'm your AI assistant for both conversation and music creation
+                  with Strudel.
+                </p>
                 <div className="mt-4 space-y-2 text-xs">
-                  <p><strong>Try chatting:</strong> "Hi, what day is it?" or "Tell me about music production"</p>
-                  <p><strong>Or create music:</strong> "Create an energetic drum pattern at 140 BPM"</p>
-                  <p><strong>Ask for help:</strong> "How does Strudel work?"</p>
-                  <p><strong>🎵 New:</strong> Generated code will have an embedded Strudel player!</p>
+                  <p>
+                    <strong>Try chatting:</strong> "Hi, what day is it?" or
+                    "Tell me about music production"
+                  </p>
+                  <p>
+                    <strong>Or create music:</strong> "Create an energetic drum
+                    pattern at 140 BPM"
+                  </p>
+                  <p>
+                    <strong>Ask for help:</strong> "How does Strudel work?"
+                  </p>
+                  <p>
+                    <strong>🎵 New:</strong> Generated code will have an
+                    embedded Strudel player!
+                  </p>
                 </div>
               </div>
             ) : (
               messages.map((message, index) => {
-                const hasStrudelCode = message.role === 'assistant' && containsStrudelCode(message.content)
-                const strudelCode = hasStrudelCode ? extractStrudelCode(message.content) : null
-                const explanation = hasStrudelCode ? extractExplanation(message.content) : message.content
-                
+                const hasStrudelCode =
+                  message.role === "assistant" &&
+                  containsStrudelCode(message.content);
+                const strudelCode = hasStrudelCode
+                  ? extractStrudelCode(message.content)
+                  : null;
+                const explanation = hasStrudelCode
+                  ? extractExplanation(message.content)
+                  : message.content;
+
                 return (
                   <div
                     key={`${message.id}-${message.content.length}`}
                     className={`flex ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                      message.role === "user" ? "justify-end" : "justify-start"
                     }`}
                   >
                     <div
                       className={`max-w-[90%] rounded-lg px-4 py-3 ${
-                        message.role === 'user'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                        message.role === "user"
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                       }`}
                     >
                       {hasStrudelCode && strudelCode ? (
@@ -328,25 +384,30 @@ export function Chat({
                               {explanation}
                             </div>
                           )}
-                          
+
                           {/* Show the Strudel player - only render when message is complete */}
-                          {message.content && !message.content.endsWith('...') && (
-                            <StrudelPlayer 
-                              code={strudelCode} 
-                              title="Generated Music Pattern"
-                              messageId={message.id}
-                            />
-                          )}
+                          {message.content &&
+                            !message.content.endsWith("...") && (
+                              <StrudelPlayer
+                                code={strudelCode}
+                                title="Generated Music Pattern"
+                                messageId={message.id}
+                                iframeKey={iframeKey}
+                                setIframeKey={setIframeKey}
+                              />
+                            )}
                         </div>
                       ) : (
-                        <div className="whitespace-pre-wrap">{message.content}</div>
+                        <div className="whitespace-pre-wrap">
+                          {message.content}
+                        </div>
                       )}
                     </div>
                   </div>
-                )
+                );
               })
             )}
-            
+
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[85%]">
@@ -385,7 +446,7 @@ export function Chat({
               </Button>
             )}
           </form>
-          
+
           {/* Quick action buttons */}
           <div className="flex gap-2 mt-2">
             <Button
@@ -393,9 +454,9 @@ export function Chat({
               size="sm"
               onClick={() => {
                 const event = {
-                  target: { value: "Hi, how are you today?" }
-                } as any
-                handleInputChange(event)
+                  target: { value: "Hi, how are you today?" },
+                } as any;
+                handleInputChange(event);
               }}
             >
               👋 Say Hello
@@ -405,9 +466,11 @@ export function Chat({
               size="sm"
               onClick={() => {
                 const event = {
-                  target: { value: "Create an energetic drum pattern at 140 BPM" }
-                } as any
-                handleInputChange(event)
+                  target: {
+                    value: "Create an energetic drum pattern at 140 BPM",
+                  },
+                } as any;
+                handleInputChange(event);
               }}
             >
               🥁 Make Beats
@@ -417,9 +480,9 @@ export function Chat({
               size="sm"
               onClick={() => {
                 const event = {
-                  target: { value: "Explain how Strudel live-coding works" }
-                } as any
-                handleInputChange(event)
+                  target: { value: "Explain how Strudel live-coding works" },
+                } as any;
+                handleInputChange(event);
               }}
             >
               📚 Learn Strudel
@@ -428,5 +491,5 @@ export function Chat({
         </div>
       </Card>
     </div>
-  )
-} 
+  );
+}
