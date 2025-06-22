@@ -1,6 +1,131 @@
 import { NextRequest } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 
-export const runtime = 'edge'
+// Change to Node.js runtime to support fs and real RAG
+export const runtime = 'nodejs'
+
+// Real RAG System Integration (from test_rag_full_context_final.py)
+interface RAGResult {
+  content: string;
+  score: number;
+  rank: number;
+  chunk_id: string;
+}
+
+interface QueryAnalysis {
+  complexity: 'simple' | 'intermediate' | 'advanced';
+  instruments: string[];
+  categories: string[];
+  estimated_tokens: number;
+}
+
+// Cache for enhanced knowledge base
+let enhancedKnowledgeBase: any[] | null = null;
+
+function loadEnhancedKnowledgeBase(): any[] {
+  if (enhancedKnowledgeBase) return enhancedKnowledgeBase;
+  
+  try {
+    // Correct path to knowledge base
+    const kbPath = path.join(process.cwd(), '../../src/scraped_data/enhanced_knowledge_base.json');
+    const kbData = fs.readFileSync(kbPath, 'utf-8');
+    const data = JSON.parse(kbData);
+    
+    // Extract chunks correctly (like in Python script)
+    enhancedKnowledgeBase = data.chunks || data;
+    console.log(`✅ Loaded ${enhancedKnowledgeBase?.length || 0} knowledge base entries`);
+    return enhancedKnowledgeBase || [];
+  } catch (error) {
+    console.error('❌ Failed to load knowledge base:', error);
+    // Fallback: try different path
+    try {
+      const fallbackPath = path.join(process.cwd(), '../src/scraped_data/enhanced_knowledge_base.json');
+      const kbData = fs.readFileSync(fallbackPath, 'utf-8');
+      const data = JSON.parse(kbData);
+      enhancedKnowledgeBase = data.chunks || data;
+      console.log(`✅ Loaded ${enhancedKnowledgeBase?.length || 0} knowledge base entries (fallback path)`);
+      return enhancedKnowledgeBase || [];
+    } catch (fallbackError) {
+      console.error('❌ Fallback also failed:', fallbackError);
+      return [];
+    }
+  }
+}
+
+function detectQueryComplexity(query: string): QueryAnalysis {
+  const queryLower = query.toLowerCase();
+  
+  // Instrument detection (from Python script)
+  const instruments: string[] = [];
+  if (queryLower.includes('piano') || queryLower.includes('key') || queryLower.includes('chord') || queryLower.includes('note')) {
+    instruments.push('piano');
+  }
+  if (queryLower.includes('drum') || queryLower.includes('beat') || queryLower.includes('rhythm') || queryLower.includes('bd') || queryLower.includes('sd') || queryLower.includes('hh')) {
+    instruments.push('drums');
+  }
+  if (queryLower.includes('bass') || queryLower.includes('sub') || queryLower.includes('low')) {
+    instruments.push('bass');
+  }
+  if (queryLower.includes('synth') || queryLower.includes('lead') || queryLower.includes('pad') || queryLower.includes('electronic')) {
+    instruments.push('synth');
+  }
+  
+  // Complexity detection (from Python script)
+  let complexity: 'simple' | 'intermediate' | 'advanced' = 'simple';
+  
+  const complexityIndicators = {
+    simple: ['simple', 'basic', 'easy', 'quick'],
+    intermediate: ['piano', 'multi', 'layer', 'stack', 'effect'],
+    advanced: ['complex', 'polyrhythm', 'experimental', 'advanced', 'fusion', 'jazz']
+  };
+  
+  for (const [level, keywords] of Object.entries(complexityIndicators)) {
+    if (keywords.some(keyword => queryLower.includes(keyword))) {
+      complexity = level as 'simple' | 'intermediate' | 'advanced';
+    }
+  }
+  
+  // Required categories (from Python script)
+  const categories = ['sound', 'pattern'];
+  if (instruments.includes('piano')) {
+    categories.push('piano', 'note', 'chord', 'melody');
+  }
+  if (complexity === 'intermediate' || complexity === 'advanced') {
+    categories.push('stack', 'effect', 'advanced');
+  }
+  if (complexity === 'advanced') {
+    categories.push('experimental', 'polyrhythm', 'complex');
+  }
+  
+  return {
+    complexity,
+    instruments,
+    categories,
+    estimated_tokens: complexity === 'simple' ? 25000 : complexity === 'intermediate' ? 50000 : 100000
+  };
+}
+
+function extractKnowledgeByCategory(categories: string[], knowledgeBase: any[]): string {
+  const extractedContent: string[] = [];
+  
+  for (const entry of knowledgeBase) {
+    // Check content, music_concepts, and strudel_functions (like Python script)
+    const contentText = entry.content?.toLowerCase() || '';
+    const concepts = String(entry.music_concepts || []).toLowerCase();
+    const functions = String(entry.strudel_functions || []).toLowerCase();
+    
+    if (categories.some(cat => 
+      contentText.includes(cat.toLowerCase()) ||
+      concepts.includes(cat.toLowerCase()) ||
+      functions.includes(cat.toLowerCase())
+    )) {
+      extractedContent.push(entry.content);
+    }
+  }
+  
+  return extractedContent.slice(0, 30).join('\n'); // Limit to first 30 matches (like Python)
+}
 
 // Enhanced Strudel code detection for backend
 function detectStrudelCode(text: string): {
@@ -86,7 +211,7 @@ async function callGemini25Flash(prompt: string): Promise<string> {
       parts: [{ text: prompt }]
     }],
     generationConfig: {
-      maxOutputTokens: 4000, // Increased for reasoning models
+      maxOutputTokens: 30000, // Increased to 30K to prevent truncation
       temperature: 0.7,
       topP: 0.8
     }
@@ -99,7 +224,7 @@ async function callGemini25Flash(prompt: string): Promise<string> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(45000) // Longer timeout
+      signal: AbortSignal.timeout(60000) // Longer timeout for large context
     })
 
     if (!response.ok) {
@@ -132,14 +257,15 @@ function isMusicRequest(message: string): boolean {
     'jazz', 'blues', 'funk', 'techno', 'house', 'synth', 'melody',
     'harmony', 'chord', 'scale', 'loop', 'sample', 'effect', 'reverb',
     'delay', 'filter', 'distortion', 'polyrhythm', 'polyrhythmic',
-    'marching', 'band', 'orchestra', 'ensemble', 'layered', 'stack'
+    'marching', 'band', 'orchestra', 'ensemble', 'layered', 'stack',
+    'piano', 'keys', 'note', 'notes'
   ]
   
   const lowerMessage = message.toLowerCase()
   return musicKeywords.some(keyword => lowerMessage.includes(keyword))
 }
 
-function createEnhancedPrompt(userMessage: string, conversationHistory: any[]): string {
+function createComprehensiveRAGPrompt(userMessage: string, conversationHistory: any[]): string {
   // Build conversation context
   let conversationContext = ""
   if (conversationHistory.length > 1) {
@@ -152,13 +278,35 @@ function createEnhancedPrompt(userMessage: string, conversationHistory: any[]): 
   const isMusicQuery = isMusicRequest(userMessage)
 
   if (isMusicQuery) {
-    // Enhanced music-focused prompt with comprehensive Strudel knowledge
-    return `You are Jamflow, an expert AI assistant specialized in Strudel live-coding music creation. You have access to comprehensive Strudel documentation and can create complex, multi-layered musical patterns.
+    // REAL RAG INTEGRATION - Load knowledge base and analyze query (from Python script)
+    const knowledgeBase = loadEnhancedKnowledgeBase();
+    const queryAnalysis = detectQueryComplexity(userMessage);
+    const kbContent = extractKnowledgeByCategory(queryAnalysis.categories, knowledgeBase);
+    
+    console.log(`🎵 RAG Analysis: ${queryAnalysis.complexity} query with ${queryAnalysis.instruments.join(', ') || 'general'} instruments`);
+    console.log(`📚 Extracted ${kbContent.length} chars from knowledge base`);
+    
+    // COMPREHENSIVE PROMPT (from test_rag_full_context_final.py)
+    return `You are Jamflow, the world's most advanced Strudel live-coding music AI. You have access to the complete Strudel documentation and can generate complex, professional-quality musical compositions.
+
+QUERY ANALYSIS:
+- Complexity: ${queryAnalysis.complexity}
+- Instruments: ${queryAnalysis.instruments.join(', ') || 'general'}
+- Estimated context needed: ${queryAnalysis.estimated_tokens} tokens
 
 CONVERSATION CONTEXT:
 ${conversationContext}
 
-COMPREHENSIVE STRUDEL SYNTAX REFERENCE:
+COMPREHENSIVE STRUDEL DOCUMENTATION:
+
+=== RELEVANT RAG CONTEXT ===
+${kbContent}
+
+=== ENHANCED KNOWLEDGE BASE ===
+${kbContent}
+
+=== COMPLETE STRUDEL SYNTAX REFERENCE ===
+
 TEMPO AND TIMING:
 setcpm(120)  // Sets tempo to 120 BPM
 setcpm(140)  // Faster tempo for energetic music
@@ -173,7 +321,20 @@ sound("[bd hh] [sd hh]")      // Grouped simultaneous sounds
 REAL SOUND PATTERNS (always use these, NEVER placeholders):
 Basic Drums: bd=bass, sd=snare, hh=hihat, cr=crash, oh=open hihat, cp=clap, cb=cowbell
 Extended Drums: mt=mid tom, ht=high tom, lt=low tom, rim=rimshot, click=metronome
-Instruments: piano, bass, lead, pad, strings, brass, organ
+Real Patterns: "bd sd hh", "bd ~ sd ~", "hh*8", "[bd sd]*2", "bd sd, hh cr"
+
+PIANO AND MELODIC INSTRUMENTS:
+// Method 1: Using note() with sound()
+note("c3 e3 g3 c4").sound("piano")
+note("<c3 e3 g3> <f3 a3 c4>").sound("piano")  // Chord progressions
+
+// Method 2: Using sample banks
+sound("piano").note("c3 e3 g3")
+sound("piano:1").note("c3")  // Specific piano sample
+
+// Method 3: GM Instruments
+note("c3 e3 g3").sound("gm_acoustic_grand_piano")
+note("c3 e3 g3").sound("gm_electric_piano_1")
 
 ADVANCED MULTI-INSTRUMENT TECHNIQUES:
 // Method 1: Comma separation for simple layering
@@ -181,20 +342,15 @@ sound("bd sd hh, cr ~ hh ~, cb*4")
 
 // Method 2: Stack function for complex arrangements
 stack(
-  sound("bd sd hh"),
-  sound("cr ~ hh ~").gain(0.7),
-  sound("cb*8").gain(0.5)
+  sound("bd sd hh cr").gain(0.8),
+  sound("hh*8").gain(0.6),
+  note("c3 e3 g3").sound("piano").gain(0.7)
 )
 
-// Method 3: Different instrument banks
-sound("bd sd hh").bank("RolandTR808")
-sound("hh*8").bank("RolandTR909").gain(0.6)
-note("c3 e3 g3").bank("piano")
-
-// Method 4: Separate tracks with different timing
+// Method 3: Separate tracks with different timing
 $: sound("bd sd").slow(2)
 $: sound("hh*8").fast(2)
-$: sound("cr ~ ~ cr")
+$: note("c3 e3 g3").sound("piano")
 
 EFFECTS AND PROCESSING:
 .gain(0.7)      // Volume control
@@ -202,39 +358,35 @@ EFFECTS AND PROCESSING:
 .delay(0.25)    // Echo effect
 .room(0.5)      // Reverb
 .pan(0.3)       // Stereo positioning
+.crush(4)       // Bit crushing
+.distort(0.5)   // Distortion
 
-NOTES AND MELODY:
-note("c3 e3 g3 c4")           // Play notes
-note("<c3 e3 g3> <f3 a3 c4>") // Chord progressions
-note("c3 ~ e3 ~")             // Notes with rests
-
-Current user request: ${userMessage}
+USER QUERY: ${userMessage}
 
 INSTRUCTIONS:
-1. Use ONLY real sound patterns and instrument names from the reference above
-2. Create rich, multi-layered compositions using multiple techniques
-3. Always start with setcpm() to set the tempo
-4. Balance volumes with .gain() when layering multiple instruments
-5. Generate complete, runnable Strudel code that sounds professional
-6. Provide clear explanations of how the patterns work together musically
-7. Use proper JavaScript syntax with semicolons and proper formatting
-8. When using stack() or multiple $: patterns, explain the layering approach
+1. Generate complete, runnable Strudel code that produces actual sound
+2. Use ONLY real sound patterns and instrument names from the documentation above
+3. Always start with setcpm() to set appropriate tempo
+4. For piano requests, use proper note() syntax with real chord progressions
+5. Balance volumes with .gain() when layering multiple instruments
+6. Include comprehensive comments explaining the musical structure
+7. Generate professional-quality compositions appropriate for the complexity level
+8. Ensure all patterns use real drum abbreviations and instrument names
 
-Provide a comprehensive response with both detailed explanation and complete, runnable code:
+Generate a comprehensive response with detailed explanation and complete, runnable code:`
 
-Response:`
   } else {
-    // General conversation prompt
-    return `You are Jamflow, a friendly AI assistant that specializes in music creation and Strudel live-coding. You can have normal conversations while being particularly knowledgeable about music, audio production, and creative coding.
+    // Conversational prompt for non-music queries
+    return `You are Jamflow, a helpful AI assistant specializing in Strudel live-coding music. 
 
 CONVERSATION CONTEXT:
 ${conversationContext}
 
-Current user message: ${userMessage}
+For non-music questions, provide helpful conversational responses. If the user wants to create music, guide them to ask about beats, rhythms, melodies, or Strudel patterns.
 
-Respond naturally and helpfully. If the conversation turns to music or if the user wants to create beats/patterns, you can offer to help generate Strudel code. Be conversational, friendly, and engaging.
+USER QUERY: ${userMessage}
 
-Response:`
+Respond conversationally and helpfully:`
   }
 }
 
@@ -256,14 +408,17 @@ function analyzeResponse(response: string): StructuredResponse {
   const codeAnalysis = detectStrudelCode(response)
   
   if (codeAnalysis.hasCode) {
-    // Extract metadata from code
-    const tempo = response.match(/setcpm\s*\(\s*(\d+)\s*\)/)?.[1]
-    const instruments = Array.from(new Set([
-      ...Array.from(response.matchAll(/sound\s*\(\s*["']([^"']+)["']\s*\)/g), m => m[1]),
-      ...Array.from(response.matchAll(/\.bank\s*\(\s*["']([^"']+)["']\s*\)/g), m => m[1])
-    ]))
+    // Extract metadata for database integration
+    const tempoMatch = response.match(/setcpm\s*\(\s*(\d+)\s*\)/)
+    const tempo = tempoMatch ? parseInt(tempoMatch[1]) : undefined
     
-    const patterns = Array.from(response.matchAll(/sound\s*\(\s*["']([^"']+)["']\s*\)/g), m => m[1])
+    // Extract instrument patterns
+    const instrumentMatches = Array.from(response.matchAll(/sound\s*\(\s*["']([^"']+)["']\s*\)/g))
+    const instruments = instrumentMatches.map(match => match[1])
+    
+    // Extract note patterns  
+    const noteMatches = Array.from(response.matchAll(/note\s*\(\s*["']([^"']+)["']\s*\)/g))
+    const patterns = [...instruments, ...noteMatches.map(match => match[1])]
     
     return {
       type: 'music',
@@ -273,19 +428,19 @@ function analyzeResponse(response: string): StructuredResponse {
       metadata: {
         hasStrudel: true,
         patterns,
-        tempo: tempo ? parseInt(tempo) : undefined,
+        tempo,
         instruments
       }
     }
-  } else {
-    return {
-      type: 'conversation',
-      explanation: response,
-      metadata: {
-        hasStrudel: false,
-        patterns: [],
-        instruments: []
-      }
+  }
+  
+  return {
+    type: 'conversation',
+    explanation: response,
+    metadata: {
+      hasStrudel: false,
+      patterns: [],
+      instruments: []
     }
   }
 }
@@ -295,118 +450,128 @@ export async function POST(req: NextRequest) {
     const { messages } = await req.json()
     
     if (!messages || !Array.isArray(messages)) {
-      return new Response('Invalid request body', { status: 400 })
+      return new Response('Invalid request format', { status: 400 })
     }
 
     const lastMessage = messages[messages.length - 1]
-    
     if (!lastMessage || lastMessage.role !== 'user') {
       return new Response('No user message found', { status: 400 })
     }
 
-    // Create enhanced prompt
-    const prompt = createEnhancedPrompt(lastMessage.content, messages)
+    // Create comprehensive RAG prompt with 100K context
+    const prompt = createComprehensiveRAGPrompt(lastMessage.content, messages)
     
-    try {
-      // Call Gemini 2.5 Flash
-      const geminiResponse = await callGemini25Flash(prompt)
-      
-      if (!geminiResponse) {
-        throw new Error('Empty response from Gemini')
-      }
+    // Call Gemini with enhanced context and 30K token limit
+    const geminiResponse = await callGemini25Flash(prompt)
+    
+    // Analyze response for database integration
+    const analysis = analyzeResponse(geminiResponse)
+    
+    // Log analysis for database integration
+    console.log('🎵 JAMFLOW RESPONSE ANALYSIS:', {
+      type: analysis.type,
+      hasCode: analysis.metadata?.hasStrudel || false,
+      codeBlocks: analysis.code?.length || 0,
+      confidence: analysis.confidence || 0,
+      tempo: analysis.metadata?.tempo,
+      instruments: analysis.metadata?.instruments || [],
+      patterns: analysis.metadata?.patterns?.length || 0,
+      timestamp: new Date().toISOString(),
+      userQuery: lastMessage.content
+    })
 
-      // Analyze the response for better frontend handling
-      const structuredResponse = analyzeResponse(geminiResponse)
-      
-      // Log for your teammate's database integration
-      console.log('🎵 JAMFLOW RESPONSE ANALYSIS:', {
-        type: structuredResponse.type,
-        hasCode: structuredResponse.metadata?.hasStrudel,
-        codeBlocks: structuredResponse.code?.length || 0,
-        confidence: structuredResponse.confidence,
-        tempo: structuredResponse.metadata?.tempo,
-        instruments: structuredResponse.metadata?.instruments,
-        patterns: structuredResponse.metadata?.patterns?.length,
-        timestamp: new Date().toISOString(),
-        userQuery: lastMessage.content
-      })
+    // Add metadata headers for backend integration
+    const headers = new Headers({
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-Jamflow-Type': analysis.type,
+      'X-Jamflow-Has-Code': String(analysis.metadata?.hasStrudel || false),
+      'X-Jamflow-Confidence': String(analysis.confidence || 0),
+      'X-Jamflow-Patterns': String(analysis.metadata?.patterns?.length || 0),
+    })
 
-      // Create streaming response that works with useChat hook
-      const stream = new ReadableStream({
-        start(controller) {
-          const encoder = new TextEncoder()
-          let intervalId: NodeJS.Timeout | null = null
-          
-          // Stream the response character by character
-          let i = 0
-          intervalId = setInterval(() => {
-            try {
-              if (i < geminiResponse.length) {
-                controller.enqueue(encoder.encode(geminiResponse[i]))
-                i++
-              } else {
-                if (intervalId) clearInterval(intervalId)
-                controller.close()
-              }
-            } catch (error) {
-              // Handle controller already closed error gracefully
-              if (intervalId) clearInterval(intervalId)
-              if (error instanceof Error && !error.message.includes('already closed')) {
-                console.error('Streaming error:', error)
-              }
-            }
-          }, 15) // Slightly faster streaming
-        },
-        cancel() {
-          // Clean up when client disconnects
-          console.log('Stream cancelled by client')
-        }
-      })
-
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache',
-          // Add metadata headers for your teammate
-          'X-Jamflow-Type': structuredResponse.type,
-          'X-Jamflow-Has-Code': structuredResponse.metadata?.hasStrudel ? 'true' : 'false',
-          'X-Jamflow-Confidence': structuredResponse.confidence?.toString() || '0',
-          'X-Jamflow-Code-Blocks': structuredResponse.code?.length.toString() || '0'
-        },
-      })
-
-    } catch (geminiError) {
-      console.error('Gemini generation failed:', geminiError)
-      
-      // Fallback response
-      const fallbackResponse = `I apologize, but I'm having trouble generating a response right now. Please try again in a moment.
-
-If you were asking about music creation, I can help you with:
-- Creating drum patterns and rhythms
-- Generating Strudel code for live-coding music
-- Explaining music theory and composition
-- Setting up multi-layered musical arrangements
-
-Please feel free to ask again!`
-
-      const stream = new ReadableStream({
-        start(controller) {
-          const encoder = new TextEncoder()
-          controller.enqueue(encoder.encode(fallbackResponse))
-          controller.close()
-        }
-      })
-
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'X-Jamflow-Error': 'true'
-        },
-      })
+    if (analysis.metadata?.tempo) {
+      headers.set('X-Jamflow-Tempo', String(analysis.metadata.tempo))
     }
 
+    // Create streaming response with proper error handling
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
+        let intervalId: NodeJS.Timeout | null = null
+        let isClosed = false
+        
+        // Stream the response character by character
+        let i = 0
+        intervalId = setInterval(() => {
+          try {
+            if (isClosed) {
+              if (intervalId) clearInterval(intervalId)
+              return
+            }
+            
+            if (i < geminiResponse.length) {
+              controller.enqueue(encoder.encode(geminiResponse[i]))
+              i++
+            } else {
+              if (intervalId) clearInterval(intervalId)
+              if (!isClosed) {
+                controller.close()
+                isClosed = true
+              }
+            }
+          } catch (error) {
+            // Handle controller already closed error gracefully
+            if (intervalId) clearInterval(intervalId)
+            isClosed = true
+            console.warn('Streaming controller error (handled):', error)
+          }
+        }, 10) // Slower streaming for stability
+      },
+      
+      cancel() {
+        // Handle client disconnect
+        console.log('Stream cancelled by client')
+      }
+    })
+
+    return new Response(stream, { headers })
+
   } catch (error) {
-    console.error('API Error:', error)
-    return new Response('Internal server error', { status: 500 })
+    console.error('API route error:', error)
+    
+    // Fallback response
+    const fallbackResponse = `I apologize, but I encountered an error generating your Strudel music. Here's a simple working pattern to get you started:
+
+\`\`\`javascript
+// Simple drum beat at 120 BPM
+setcpm(120);
+sound("bd hh sd hh");
+\`\`\`
+
+Please try your request again!`
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder()
+        let i = 0
+        const intervalId = setInterval(() => {
+          if (i < fallbackResponse.length) {
+            controller.enqueue(encoder.encode(fallbackResponse[i]))
+            i++
+          } else {
+            clearInterval(intervalId)
+            controller.close()
+          }
+        }, 10)
+      }
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Jamflow-Type': 'fallback',
+        'X-Jamflow-Has-Code': 'true'
+      }
+    })
   }
 } 
