@@ -83,7 +83,7 @@ export const getRecentChat = async (req: Request, res: Response) => {
     where: { userId: userId },
     include: { messages: true },
     orderBy: {
-      createdAt: "asc",
+      createdAt: "desc",
     },
   });
   if (!chats.length) {
@@ -94,13 +94,14 @@ export const getRecentChat = async (req: Request, res: Response) => {
       },
     });
   }
-  const filterMessages = await getFilteredMessages(chats[chats.length - 1]);
-  const recentChat = chats[chats.length - 1];
+  const filterMessages = await getFilteredMessages(chats[0]);
+  const recentChat = chats[0];
 
   return res.status(200).json({
     message: "Received chat successfully",
     data: {
       id: recentChat.id,
+      public: recentChat.public,
       messages: filterMessages,
       timestamp: recentChat.createdAt,
     },
@@ -115,10 +116,17 @@ export const getChats = async (req: Request, res: Response) => {
   const chats = await prisma.chat.findMany({
     where: { userId: userId },
     include: { messages: true },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
   const filterChatsMessages = [];
   for (const chat of chats) {
-    filterChatsMessages.push(await getFilteredMessages(chat));
+    filterChatsMessages.push({
+      id: chat.id,
+      public: chat.public,
+      messages: await getFilteredMessages(chat)
+  });
   }
   return res.status(200).json({
     message: "Received chats successfully",

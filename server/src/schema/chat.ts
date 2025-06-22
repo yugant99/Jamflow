@@ -53,18 +53,20 @@ const getChatsResponseSchema = z.object({
   message: z.string(),
   data: z.object({
     chats: z.array(
-      z.array(
         z.object({
-          snippets: z.array(
-            z.object({
-              type: z.enum([SnippetType.CODE, SnippetType.TEXT]),
-              content: z.string(),
-            })
-          ),
           id: z.string(),
-          from: z.enum([MessageType.USER, MessageType.BOT]),
+          public: z.boolean(),
+          messages: z.array(z.object({
+            snippets: z.array(
+              z.object({
+                type: z.enum([SnippetType.CODE, SnippetType.TEXT]),
+                content: z.string(),
+              })
+            ),
+            id: z.string(),
+            from: z.enum([MessageType.USER, MessageType.BOT]),
+          }))
         })
-      )
     ),
   }),
 });
@@ -73,6 +75,7 @@ const getRecentChatSchema = z.object({
   message: z.string(),
   data: z.object({
     id: z.string(),
+    public: z.boolean(),
     messages: z.array(
       z.object({
         id: z.string(),
