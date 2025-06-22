@@ -1,0 +1,13 @@
+﻿* For file name : - > batch_01,json is what we want content of 
+Json , this json contains title, description , content,  code_examples, 
+Then there is a json in it again ,we want that as well, title, description , content , code_examples 
+There is a json in it this same file batch_01 and it has the same structure , as the other 2 json 
+At this point you can assume that this is the third json then it is the json for the third url it is scraping 
+I want to do the same for the files batch_02.json, batch_03.json , batch_04.json 
+Then we have other files these files have ddifferent naming format so make sure refex just refers every single json 
+But ensure it doesnt do duplicates man 
+It doesnt need to go into duplicate files 
+Thirdly , 
+These other files they follow a different convention of actually making it in such a way that the main content is everything inside a key of a json key called 
+“Data “ this has three main components in it title , description , content ,code_examples , in files three is also a section called sections, not all but this is relevant info  
+Other things arent really relevant in these files whatever is in these 4 main components

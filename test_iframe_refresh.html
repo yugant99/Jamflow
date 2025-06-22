@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Iframe Refresh</title>
+</head>
+<body>
+    <h1>Testing Strudel Iframe Refresh</h1>
+    
+    <div>
+        <button onclick="loadCode1()">Load Code 1 (Drums)</button>
+        <button onclick="loadCode2()">Load Code 2 (Jazz)</button>
+        <button onclick="loadCode3()">Load Code 3 (Ambient)</button>
+    </div>
+    
+    <br>
+    <iframe id="strudel-iframe" 
+            src="https://strudel.cc/" 
+            style="width: 100%; height: 500px; border: 1px solid #ccc;">
+    </iframe>
+    
+    <script>
+        const iframe = document.getElementById('strudel-iframe');
+        
+        function loadCode1() {
+            const code = `setcpm(120)
+sound("bd sd hh cr")`;
+            const encodedCode = encodeURIComponent(code);
+            const newUrl = `https://strudel.cc/?code=${encodedCode}&t=${Date.now()}`;
+            console.log('Loading Code 1:', newUrl);
+            iframe.src = newUrl;
+        }
+        
+        function loadCode2() {
+            const code = `setcpm(100)
+stack(
+  sound("bd ~ ~ ~").gain(0.8),
+  sound("~ sd ~ ~").gain(0.7),
+  sound("hh*8").gain(0.6)
+)`;
+            const encodedCode = encodeURIComponent(code);
+            const newUrl = `https://strudel.cc/?code=${encodedCode}&t=${Date.now()}`;
+            console.log('Loading Code 2:', newUrl);
+            iframe.src = newUrl;
+        }
+        
+        function loadCode3() {
+            const code = `setcpm(60)
+note("c3 e3 g3").sound("pad").room(0.8).slow(2)`;
+            const encodedCode = encodeURIComponent(code);
+            const newUrl = `https://strudel.cc/?code=${encodedCode}&t=${Date.now()}`;
+            console.log('Loading Code 3:', newUrl);
+            iframe.src = newUrl;
+        }
+    </script>
+</body>
+</html>

@@ -324,27 +324,56 @@ Extended Drums: mt=mid tom, ht=high tom, lt=low tom, rim=rimshot, click=metronom
 Real Patterns: "bd sd hh", "bd ~ sd ~", "hh*8", "[bd sd]*2", "bd sd, hh cr"
 
 PIANO AND MELODIC INSTRUMENTS:
-// Method 1: Using note() with sound()
-note("c3 e3 g3 c4").sound("piano")
-note("<c3 e3 g3> <f3 a3 c4>").sound("piano")  // Chord progressions
+// Method 1: Sequential notes
+note("c3 e3 g3 c4").sound("piano")  // Play notes in sequence
+note("b g e c").sound("piano")      // Simple melody
 
-// Method 2: Using sample banks
-sound("piano").note("c3 e3 g3")
-sound("piano:1").note("c3")  // Specific piano sample
+// Method 2: Chord progressions with commas and brackets
+note("c2, eb3 g3 [bb3 c4]").sound("piano")     // Bass note + chord
+note("c3, e3 g3").sound("piano")               // Simple chord
+note("[c3 e3 g3], [f3 a3 c4]").sound("piano") // Chord sequence
 
-// Method 3: GM Instruments
-note("c3 e3 g3").sound("gm_acoustic_grand_piano")
-note("c3 e3 g3").sound("gm_electric_piano_1")
+// Method 3: Alternating patterns with <>
+note("<c3 e3 g3> <f3 a3 c4>").sound("piano")  // Alternating chords
+note("<c e g> <f a c>").sound("piano")         // Simple progression
+
+// Method 4: IMPORTANT - Use ONLY these valid piano sounds:
+// For acoustic piano: use "piano" (most reliable)
+note("c3 e3 g3").sound("piano")                // Standard acoustic piano
+// For electric piano: use "gm_electric_piano_1" (only if specifically requested)
+note("c3 e3 g3").sound("gm_electric_piano_1")  // Electric piano sound
+
+// Method 5: Using n() with scales
+n("0 2 4 7").scale("C:major").sound("piano")   // Scale-based approach
+
+// CRITICAL: NEVER use "gm_acoustic_grand_piano" - it doesn't exist in Strudel
+// Always use "piano" for acoustic piano sounds unless electric piano is specifically requested
 
 ADVANCED MULTI-INSTRUMENT TECHNIQUES:
 // Method 1: Comma separation for simple layering
 sound("bd sd hh, cr ~ hh ~, cb*4")
 
-// Method 2: Stack function for complex arrangements
+// Method 2: Stack function for complex arrangements (CORRECT SYNTAX)
 stack(
-  sound("bd sd hh cr").gain(0.8),
-  sound("hh*8").gain(0.6),
-  note("c3 e3 g3").sound("piano").gain(0.7)
+  sound("bd sd hh cr").gain(0.8),          // ← COMMA required
+  sound("hh*8").gain(0.6),                 // ← COMMA required  
+  note("c3 e3 g3").sound("piano").gain(0.7) // ← NO comma on last line
+)
+
+// CORRECT: Complex piano patterns (single-line strings)
+stack(
+  // Bass line with chord progression - using standard piano sound
+  note("<c2 g2 a2 f2>").sound("piano").gain(0.6),
+  // Chord stabs - CORRECT single-line format
+  note("<[c3 e3 g3] [g3 b3 d4] [a3 c4 e4] [f3 a3 c4]>").sound("piano").gain(0.7),
+  // Melody line - CORRECT alternating pattern  
+  note("<c4 e4 g4 e4> <g4 b4 d5 b4> <a4 c5 e5 c5> <f4 a4 c5 a4>").sound("piano").gain(0.8)
+)
+
+// Example with electric piano (only when specifically requested)
+stack(
+  note("<c2 g2 a2 f2>").sound("gm_electric_piano_1").gain(0.6),
+  note("<[c3 e3 g3] [g3 b3 d4]>").sound("gm_electric_piano_1").gain(0.7)
 )
 
 // Method 3: Separate tracks with different timing
@@ -363,15 +392,35 @@ EFFECTS AND PROCESSING:
 
 USER QUERY: ${userMessage}
 
+CRITICAL SYNTAX RULES:
+- ALWAYS end each line in stack() with a comma, except the last line
+- Use proper note syntax: note("c3 e3 g3") NOT note("<c3 e3 g3 b3>")
+- For chords: note("c3, e3 g3") or note("[c3 e3 g3]") 
+- For alternating: note("<c3 e3 g3> <f3 a3 c4>")
+- Close all parentheses and brackets correctly
+- NEVER put comments inside string literals: note("c3 // comment") is INVALID
+- NEVER use multi-line strings: keep all note() patterns on single lines
+- Put comments OUTSIDE the code: // comment BEFORE note("pattern")
+- Use simple, single-line patterns: note("<c3 e3 g3> <f3 a3 c4>")
+- NO line breaks inside quotes: "pattern" must be on one line
+
+PIANO SELECTION RULES:
+- If user asks for "acoustic piano", "grand piano", or just "piano" → use .sound("piano")
+- If user asks for "electric piano", "rhodes", or "EP" → use .sound("gm_electric_piano_1")
+- Default to .sound("piano") for all piano requests unless electric is specifically mentioned
+- NEVER use "gm_acoustic_grand_piano" - this sound name does not exist in Strudel
+
 INSTRUCTIONS:
 1. Generate complete, runnable Strudel code that produces actual sound
 2. Use ONLY real sound patterns and instrument names from the documentation above
 3. Always start with setcpm() to set appropriate tempo
 4. For piano requests, use proper note() syntax with real chord progressions
-5. Balance volumes with .gain() when layering multiple instruments
-6. Include comprehensive comments explaining the musical structure
-7. Generate professional-quality compositions appropriate for the complexity level
-8. Ensure all patterns use real drum abbreviations and instrument names
+5. Apply PIANO SELECTION RULES above to choose the correct piano sound
+6. Balance volumes with .gain() when layering multiple instruments
+7. Include comprehensive comments explaining the musical structure
+8. Generate professional-quality compositions appropriate for the complexity level
+9. Ensure all patterns use real drum abbreviations and instrument names
+10. VERIFY syntax: every line in stack() ends with comma except last line
 
 Generate a comprehensive response with detailed explanation and complete, runnable code:`
 
