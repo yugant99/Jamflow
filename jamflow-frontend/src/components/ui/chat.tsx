@@ -90,31 +90,15 @@ function extractExplanation(content: string): string {
   return textLines.join("\n").trim();
 }
 
-// Strudel Player Component - Memoized to prevent unnecessary re-renders
-const StrudelPlayer = React.memo(function StrudelPlayer({
-  code,
-  title,
-  messageId,
-  iframeKey,
-  setIframeKey,
-}: {
-  code: string;
-  title?: string;
-  messageId?: string;
-  iframeKey: number;
-  setIframeKey: React.Dispatch<React.SetStateAction<number>>;
-}) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentCode, setCurrentCode] = useState(code); // Track current loaded code
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  // Update currentCode when code prop changes
-  useEffect(() => {
-    setCurrentCode(code);
-  }, [code]);
-
+// Strudel Player Component using @strudel/embed - No more iframe caching issues!
+const StrudelPlayer = React.memo(function StrudelPlayer({ code, title, messageId }: { code: string; title?: string; messageId?: string }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [showPlayer, setShowPlayer] = useState(false)
+  const strudelContainerRef = useRef<HTMLDivElement>(null)
+  const strudelElementRef = useRef<HTMLElement | null>(null)
+  
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
     setCopied(true);
@@ -122,39 +106,70 @@ const StrudelPlayer = React.memo(function StrudelPlayer({
   };
 
   const handlePlayInline = () => {
-    console.log("🎵 Play Inline clicked for message:", messageId);
-    console.log("🎵 Code to load (first 100 chars):", code.substring(0, 100));
-
-    setIsExpanded(true);
-    setIsLoading(true);
-
-    // Force complete iframe recreation by changing key and updating current code
-    setCurrentCode(code);
-    setIframeKey(iframeKey + 1);
-
-    // Stop loading indicator after iframe recreates
-    setTimeout(() => setIsLoading(false), 3000);
-  };
-
-  // Create a fresh URL each time with proper encoding and cache-busting
-  const createStrudelUrl = (codeToEncode: string) => {
-    const cleanCode = codeToEncode.trim();
-    const encodedCode = encodeURIComponent(cleanCode);
-    const timestamp = Date.now();
-    const randomId = Math.random().toString(36).substr(2, 9);
-    return `https://strudel.cc/?code=${encodedCode}&t=${timestamp}&r=${randomId}&msg=${messageId}&key=${iframeKey}`;
-  };
-
-  const strudelUrl = createStrudelUrl(currentCode);
-
-  console.log("🎵 StrudelPlayer rendering:", {
-    messageId,
-    codeLength: code.length,
-    currentCodeLength: currentCode.length,
-    iframeKey,
-    isExpanded,
-  });
-
+    console.log('🎵 Play Inline clicked - Creating Strudel embed component')
+    console.log('🎵 Code to load:', code.substring(0, 100) + '...')
+    
+    setIsLoading(true)
+    setShowPlayer(true)
+    
+    // Create the Strudel embed component dynamically
+    setTimeout(() => {
+      if (strudelContainerRef.current) {
+        // Clear any existing component
+        strudelContainerRef.current.innerHTML = ''
+        
+        // Create new strudel-repl element
+        const strudelElement = document.createElement('strudel-repl')
+        strudelElement.setAttribute('code', code)
+        
+        // Add some styling
+        strudelElement.style.width = '100%'
+        strudelElement.style.height = '400px'
+        strudelElement.style.border = '1px solid #e5e7eb'
+        strudelElement.style.borderRadius = '8px'
+        
+        // Store reference and append
+        strudelElementRef.current = strudelElement
+        strudelContainerRef.current.appendChild(strudelElement)
+        
+        console.log('🎵 Strudel embed component created successfully')
+        setIsLoading(false)
+      }
+    }, 100)
+  }
+  
+  // Load Strudel embed script on component mount
+  useEffect(() => {
+    // Check if script is already loaded
+    if (!document.querySelector('script[src*="@strudel/embed"]')) {
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/@strudel/embed@latest'
+      script.async = true
+      script.onload = () => {
+        console.log('🎵 Strudel embed script loaded successfully')
+      }
+      script.onerror = () => {
+        console.error('🎵 Failed to load Strudel embed script')
+      }
+      document.head.appendChild(script)
+    }
+  }, [])
+  
+  // Update code when it changes
+  useEffect(() => {
+    if (strudelElementRef.current && showPlayer) {
+      console.log('🎵 Updating Strudel code:', code.substring(0, 50) + '...')
+      strudelElementRef.current.setAttribute('code', code)
+    }
+  }, [code, showPlayer])
+  
+  console.log('🎵 StrudelPlayer rendering:', { 
+    messageId, 
+    codeLength: code.length, 
+    showPlayer,
+    isExpanded 
+  })
+  
   return (
     <div className="space-y-3 border rounded-lg p-4 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950">
       <div className="flex items-center justify-between">
@@ -214,48 +229,35 @@ const StrudelPlayer = React.memo(function StrudelPlayer({
           variant="outline"
           className="flex items-center gap-2"
           onClick={() => {
-            const url = createStrudelUrl(code);
-            console.log("🎵 Opening in new tab:", url);
-            window.open(url, "_blank");
+            const encodedCode = encodeURIComponent(code.trim())
+            const timestamp = Date.now()
+            const url = `https://strudel.cc/?code=${encodedCode}&t=${timestamp}`
+            console.log('🎵 Opening in new tab:', url)
+            window.open(url, '_blank')
           }}
         >
           <ExternalLink className="h-3 w-3" />
           Open in Strudel
         </Button>
       </div>
-
-      {isExpanded && (
+      
+      {showPlayer && (
         <div className="mt-4">
           <div className="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-2">
             <Music className="h-3 w-3" />
             {isLoading ? (
               <span className="flex items-center gap-1">
                 <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-600"></div>
-                Loading fresh Strudel editor with your code... (Key: {iframeKey}
-                )
+                Loading Strudel embed component...
               </span>
             ) : (
-              `Live Strudel Editor - Message ${messageId?.slice(
-                -4
-              )} (Key: ${iframeKey})`
+              `Embedded Strudel Player - Message ${messageId?.slice(-4)}`
             )}
           </div>
-          <iframe
-            key={`strudel-${messageId}-${iframeKey}`} // Unique key forces complete recreation
-            ref={iframeRef}
-            src={strudelUrl}
-            className="w-full h-96 border rounded"
-            title={`Strudel Player - ${title} - ${messageId}`}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            loading="lazy"
-            onLoad={() => {
-              console.log("🎵 Strudel iframe loaded:", {
-                messageId,
-                iframeKey,
-                url: strudelUrl.substring(0, 100) + "...",
-              });
-              setIsLoading(false);
-            }}
+          <div 
+            ref={strudelContainerRef}
+            className="w-full border rounded-lg bg-white dark:bg-gray-900"
+            style={{ minHeight: '400px' }}
           />
         </div>
       )}

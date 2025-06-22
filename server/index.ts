@@ -7,7 +7,7 @@ import rateLimit from "./src/controllers/middleware";
 
 config();
 export const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8000;
 const url = `http://localhost:${port}`;
 // @ts-ignore
 app.use(rateLimit);

@@ -8,6 +8,8 @@ import {
   unshareChat,
   updateChat,
   generateResponseFromPrompt,
+  getChats,
+  getRecentChat
 } from "../controllers/chat";
 
 export const router = Router();
@@ -16,6 +18,11 @@ export const router = Router();
 router.use(validateToken);
 
 router.get("/test", test);
+
+// @ts-ignore
+router.get("/chats", getChats);
+// @ts-ignore
+router.get("/chat/recent", getRecentChat);
 // @ts-ignore
 router.put("/auth/change-password", changePassword);
 // @ts-ignore
@@ -34,5 +41,6 @@ router.delete("/chat/:id", deleteChat);
 router.post("/share/:id", shareChat);
 // @ts-ignore
 router.post("/unshare/:id", unshareChat);
+
 
 export default router;

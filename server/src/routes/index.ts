@@ -15,6 +15,6 @@ router.post("/auth/signup", signUp);
 router.post("/auth/signin", signIn);
 
 // @ts-ignore
-router.get("/chat/:id", getChat);
+router.get("/chat/:id([0-9a-fA-F-]{36})", getChat);
 
 export default router;
